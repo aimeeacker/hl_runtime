@@ -1,0 +1,54 @@
+[Unit]
+Description=Hyperliquid Non-Validator Node (hl-visor)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=aimee
+UMask=0022
+MemoryHigh=49G
+MemoryMax=50G
+MemorySwapMax=0
+PermissionsStartOnly=true
+
+WorkingDirectory=/home/aimee/hl_runtime
+
+Environment=RUST_BACKTRACE=1
+Environment=RUST_LOG=info
+
+
+ExecStartPre=/usr/sbin/runuser -u aimee -- /home/aimee/hl_runtime/book_tmpfs_init.sh
+ExecStart=/home/aimee/hl_runtime/hl-visor run-non-validator --serve-info --write-fills --write-order-statuses --write-raw-book-diffs --disable-output-file-buffering --batch-by-block --replica-cmds-style recent-actions
+# A起来后，异步等待300s再拉起B
+#ExecStartPost=/bin/sh -c 'sleep 59; /usr/bin/systemctl start --no-block book_server.service'
+ExecStartPost=/bin/sh -c 'nohup sh -c "sleep 59; systemctl start --no-block book_server.service" >/dev/null 2>&1 &'
+# A被stop时，显式stop B
+ExecStopPost=/usr/bin/systemctl stop book_server.service
+
+# 优雅退出，避免checkpoint反复重做
+KillSignal=SIGINT
+TimeoutStopSec=120
+Restart=always
+RestartSec=5
+
+# 资源与稳定性
+LimitNOFILE=1048576
+LimitNPROC=1048576
+Nice=-5
+
+# systemd 日志标识
+SyslogIdentifier=hyex
+
+# 安全硬化（不影响写数据盘）
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=false
+ProtectSystem=full
+ReadWritePaths=/home/aimee /data/hyperliquid
+
+[Install]
+WantedBy=multi-user.target
+
