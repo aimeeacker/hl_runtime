@@ -1,6 +1,0 @@
-tmpfs  /dev/shm  tmpfs  size=1G,nosuid,nodev,noexec  0  0
-
-# hyperliquid runtime
-tmpfs  /home/aimee/hl_runtime/hl_book  tmpfs  size=511M,nosuid,nodev,noexec,uid=1000,gid=1000,mode=0770  0  0
-/dev/vdb1 /home/aimee/hl_runtime/hl xfs  noatime,nodiratime,logbufs=8,logbsize=256k,allocsize=512m,inode64,attr2  0  0
-tmpfs  /home/aimee/hl_runtime/hl_tmp  tmpfs  size=255M,nosuid,nodev,noexec,uid=1000,gid=1000,mode=0770  0  0
