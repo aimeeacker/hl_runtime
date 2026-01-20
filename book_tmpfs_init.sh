@@ -52,14 +52,14 @@ if [ "$MODE" = "init" ]; then
         fi
     done
 
-    ln -sf "$ROOT/hl" "/home/aimee/hl"
-    ln -sf "$TEMP" "$ROOT/hl/data"
+    ln -sTf "$ROOT/hl" "/home/aimee/hl"
+    ln -sTf "$TEMP" "$ROOT/hl/data"
 
     # 3. Top-level symlinks (TEMP -> BOOK)
-    ln -sf "$BOOK/node_fills$SUFFIX" "$TEMP/node_fills$SUFFIX"
-    ln -sf "$BOOK/node_order_statuses$SUFFIX" "$TEMP/node_order_statuses$SUFFIX"
-    ln -sf "$BOOK/node_raw_book_diffs$SUFFIX" "$TEMP/node_raw_book_diffs$SUFFIX"
-    ln -sf "$ROOT/hl/periodic_abci_states" "$TEMP/periodic_abci_states"
+    ln -sTf "$BOOK/node_fills$SUFFIX" "$TEMP/node_fills$SUFFIX"
+    ln -sTf "$BOOK/node_order_statuses$SUFFIX" "$TEMP/node_order_statuses$SUFFIX"
+    ln -sTf "$BOOK/node_raw_book_diffs$SUFFIX" "$TEMP/node_raw_book_diffs$SUFFIX"
+    ln -sTf "$ROOT/hl/periodic_abci_states" "$TEMP/periodic_abci_states"
 
     # Target: Current UTC time
     link_hour "init" date -u
