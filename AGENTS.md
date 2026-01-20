@@ -3,11 +3,12 @@
 ## Project Structure & Module Organization
 - Root contains runtime binaries and configs for the Hyperliquid non-validator node.
 - Binaries: `hl-visor`, `hl-node`, `fifo_listener`, and `book_server` (symlink).
-- Config/ops files: `hyperliquid.service`, `visor.json`, `override_gossip_config.json`, `crontab`, `fstab`, `book_tmpfs_init.sh`.
+- Config/ops files: `systemd/` units, `install_systemd_units.sh`, `init_deploy.sh`, `visor.json`, `override_gossip_config.json`, `book_tmpfs_init.sh`.
 - Runtime data (mounted/tmpfs): `hl/`, `hl_book/`, `hl_tmp/` (ignored by git).
 
 ## Build, Test, and Development Commands
 - `./book_tmpfs_init.sh` initializes FIFOs and hourly links; `./book_tmpfs_init.sh next` prepares the next UTC hour (cron usage).
+- Install systemd units: `sudo ./install_systemd_units.sh`.
 - Install and run the service (system scope): `sudo systemctl start hyperliquid.service` and `sudo systemctl status hyperliquid.service`.
 - Manual run (mirrors the unit file):
   `./hl-visor run-non-validator --serve-info --write-fills --write-order-statuses --write-raw-book-diffs --disable-output-file-buffering --batch-by-block --replica-cmds-style recent-actions`.

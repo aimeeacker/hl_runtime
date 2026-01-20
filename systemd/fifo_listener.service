@@ -1,0 +1,22 @@
+[Unit]
+Description=Hyperliquid FIFO listener
+After=network-online.target
+Wants=network-online.target
+PartOf=hyperliquid.service
+
+[Service]
+Type=simple
+User=@RUN_USER@
+UMask=0022
+WorkingDirectory=@ROOT@
+ExecStart=/bin/bash -c 'exec @ROOT@/fifo_listener >> @ROOT@/hl_book/fifo.log 2>&1'
+KillSignal=SIGINT
+Restart=always
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=false
+ProtectSystem=full
+ReadWritePaths=@ROOT@
+SyslogIdentifier=fifo
+Slice=hl_runtime.slice

@@ -1,0 +1,7 @@
+[Unit]
+Description=Hyperliquid runtime slice
+
+[Slice]
+CPUAccounting=true
+MemoryAccounting=true
+IOAccounting=true

@@ -2,34 +2,35 @@
 Description=Hyperliquid Non-Validator Node (hl-visor)
 After=network-online.target
 Wants=network-online.target
+Wants=hl_runtime_maintenance.timer
+Wants=fifo_listener.service
+After=fifo_listener.service
 #StartLimitIntervalSec=300
 StartLimitBurst=10
 
 [Service]
 Type=simple
-User=aimee
+User=@RUN_USER@
 UMask=0022
 MemoryHigh=49G
 MemoryMax=50G
 MemorySwapMax=0
 #PermissionsStartOnly=true
 
-WorkingDirectory=/home/aimee/hl_runtime
+WorkingDirectory=@ROOT@
 
 #Environment=RUST_BACKTRACE=1
 Environment=RUST_LOG=info
 
 
-ExecStartPre=/home/aimee/hl_runtime/book_tmpfs_init.sh
-ExecStart=/home/aimee/hl_runtime/hl-visor run-non-validator --serve-info --write-fills --write-order-statuses --write-raw-book-diffs --disable-output-file-buffering --batch-by-block --replica-cmds-style recent-actions
-# Use a subshell with SIGINT trap reset to ensure the listener receives the kill signal
-ExecStartPost=/bin/bash -c '(trap - SIGINT; exec /home/aimee/hl_runtime/fifo_listener >> /home/aimee/hl_runtime/hl_book/fifo.log 2>&1) &'
+ExecStartPre=@ROOT@/book_tmpfs_init.sh
+ExecStartPre=/bin/systemctl is-active --quiet fifo_listener.service
+ExecStart=@ROOT@/hl-visor run-non-validator --serve-info --write-fills --write-order-statuses --write-raw-book-diffs --disable-output-file-buffering --batch-by-block --replica-cmds-style recent-actions
 
 # Graceful shutdown to prevent checkpoint corruption
 KillSignal=SIGINT
 TimeoutStopSec=120
 Restart=always
-RestartSec=5
 
 # Resource limits
 LimitNOFILE=1048576
@@ -39,12 +40,14 @@ Nice=-5
 # Syslog identifier
 SyslogIdentifier=hyex
 
+Slice=hl_runtime.slice
+
 # Security hardening
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=false
 ProtectSystem=full
-ReadWritePaths=/home/aimee/hl_runtime
+ReadWritePaths=@ROOT@
 
 [Install]
 WantedBy=multi-user.target

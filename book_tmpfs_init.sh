@@ -52,6 +52,9 @@ if [ "$MODE" = "init" ]; then
         fi
     done
 
+    ln -sf "$ROOT/hl" "/home/aimee/hl"
+    ln -sf "$TEMP" "$ROOT/hl/data"
+
     # 3. Top-level symlinks (TEMP -> BOOK)
     ln -sf "$BOOK/node_fills$SUFFIX" "$TEMP/node_fills$SUFFIX"
     ln -sf "$BOOK/node_order_statuses$SUFFIX" "$TEMP/node_order_statuses$SUFFIX"

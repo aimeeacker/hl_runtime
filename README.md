@@ -3,7 +3,8 @@
 This repository contains runtime binaries, configs, and operational scripts for a Hyperliquid non-validator node. It is intended to be deployed via systemd with tmpfs-backed data directories and scheduled maintenance jobs.
 
 ## Service
-- Systemd unit: `hyperliquid.service`
+- Systemd units live in `systemd/`. Install them with `sudo ./install_systemd_units.sh`.
+- Main service unit: `hyperliquid.service`
 - Manual run (matches the unit file):
   ```bash
   ./hl-visor run-non-validator --serve-info --write-fills --write-order-statuses --write-raw-book-diffs --disable-output-file-buffering --batch-by-block --replica-cmds-style recent-actions
@@ -25,9 +26,13 @@ Set these in the user crontab (or a dedicated service account):
 ```cron
 0 */4 * * * /usr/bin/find /home/aimee/hl_runtime/hl_book \( -type f -o -type l \) -mmin +2 -delete
 59 * * * * /home/aimee/hl_runtime/book_tmpfs_init.sh next
-#*/5 * * * * /usr/bin/find /home/aimee/hl_runtime/hl_tmp/replica_cmds -type f -mmin +3 -delete
-*/5 * * * * /usr/bin/find /home/aimee/hl_runtime/hl/periodic_abci_states -type f -mmin +3 -delete
-*/5 * * * * cd /home/aimee/hl_runtime/hl/hyperliquid_data/evm_db_hub_slow/checkpoint && ls -d */ | sed 's:/$::' | sort -nr | tail -n +3 | xargs -r rm -rf
+```
+
+## Scheduled maintenance (systemd timer)
+The 5-minute maintenance tasks are handled by a timer:
+```bash
+sudo systemctl enable --now hl_runtime_maintenance.timer
+sudo systemctl status hl_runtime_maintenance.timer
 ```
 
 ## Kernel and network tuning (sysctl)

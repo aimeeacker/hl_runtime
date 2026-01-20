@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 RUN_USER="${RUN_USER:-${SUDO_USER:-$USER}}"
 CHAIN="${CHAIN:-}"
 SERVICE_NAME="hyperliquid.service"
-SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
+UNIT_INSTALL_SCRIPT="$ROOT/install_systemd_units.sh"
 SYSCTL_PATH="/etc/sysctl.d/99-hl.conf"
 FSTAB_PATH="/etc/fstab"
 BEGIN_MARKER="# BEGIN hl_runtime"
@@ -70,50 +70,6 @@ update_hl_visor() {
     run_as_user gpg --verify "$ROOT/hl-visor.asc" "$ROOT/hl-visor"
 }
 
-write_service() {
-    cat > "$SERVICE_PATH" <<EOF
-[Unit]
-Description=Hyperliquid Non-Validator Node (hl-visor)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=$RUN_USER
-UMask=0022
-MemoryHigh=49G
-MemoryMax=50G
-MemorySwapMax=0
-
-WorkingDirectory=$ROOT
-Environment=RUST_LOG=info
-
-ExecStartPre=$ROOT/book_tmpfs_init.sh
-ExecStart=$ROOT/hl-visor run-non-validator --serve-info --write-fills --write-order-statuses --write-raw-book-diffs --disable-output-file-buffering --batch-by-block --replica-cmds-style recent-actions
-ExecStartPost=/bin/bash -c '(trap - SIGINT; exec $ROOT/fifo_listener >> $ROOT/hl_book/fifo.log 2>&1) &'
-
-KillSignal=SIGINT
-TimeoutStopSec=120
-Restart=no
-
-LimitNOFILE=1048576
-LimitNPROC=1048576
-Nice=-5
-SyslogIdentifier=hyex
-
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectHome=false
-ProtectSystem=full
-ReadWritePaths=$ROOT
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    chmod 0644 "$SERVICE_PATH"
-    systemctl daemon-reload
-}
-
 write_sysctl() {
     cat > "$SYSCTL_PATH" <<EOF
 fs.pipe-max-size = 16777216
@@ -170,9 +126,6 @@ write_crontab() {
 $BEGIN_MARKER
 0 */4 * * * /usr/bin/find $ROOT/hl_book \\( -type f -o -type l \\) -mmin +2 -delete
 59 * * * * $ROOT/book_tmpfs_init.sh next
-#*/5 * * * * /usr/bin/find $ROOT/hl_tmp/replica_cmds -type f -mmin +3 -delete
-*/5 * * * * /usr/bin/find $ROOT/hl/periodic_abci_states -type f -mmin +3 -delete
-*/5 * * * * cd $ROOT/hl/hyperliquid_data/evm_db_hub_slow/checkpoint && ls -d */ | sed 's:/$::' | sort -nr | tail -n +3 | xargs -r rm -rf
 $END_MARKER
 EOF
 )
@@ -204,13 +157,14 @@ main() {
     mkdir -p "$ROOT/hl_book" "$ROOT/hl_tmp" "$ROOT/hl"
 
     update_hl_visor
-    write_service
+    RUN_USER="$RUN_USER" ENABLE_TIMER=1 "$UNIT_INSTALL_SCRIPT"
     write_fstab
     write_sysctl
     write_crontab
 
     echo "Done."
-    echo "Service installed at $SERVICE_PATH (not enabled or started)."
+    echo "Service installed at /etc/systemd/system/$SERVICE_NAME (not enabled or started)."
+    echo "Timer installed and enabled: hl_runtime_maintenance.timer"
     echo "To start: systemctl start $SERVICE_NAME"
     echo "To enable at boot: systemctl enable $SERVICE_NAME"
 }
