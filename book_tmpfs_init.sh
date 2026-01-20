@@ -1,47 +1,66 @@
-#!/bin/sh
+#!/bin/bash
 set -eu
 
-B="/home/aimee/hl_runtime/hl_tmp"
-book="/home/aimee/hl_runtime/hl_book"
-t="_by_block"
+# Config
+ROOT="/home/aimee/hl_runtime"
+BOOK="$ROOT/hl_book"
+TEMP="$ROOT/hl_tmp"
+SUFFIX="_by_block"
 
-# UTC 日期：YYYYMMDD
-D="$(date -u +%Y%m%d)"
+# Mode: "init" (default, for service startup) or "next" (cron job for next hour)
+MODE="${1:-init}"
 
-# UTC 小时：用 %H 得到 00..23，再去掉前导 0（POSIX 兼容）
-H="$(date -u +%H)"
-H="${H#0}"
-[ -n "$H" ] || H=0
+if [ "$MODE" = "init" ]; then
+    # === Init Mode ===
+    
+    # 1. Base directories
+    mkdir -p "$TEMP"
+    mkdir -p "$ROOT/hl/periodic_abci_states"
 
-# 1) 基础目录
-mkdir -p "$B"
+    # 2. FIFO pipes
+    for pipe in fills order diffs; do
+        if [ ! -p "$BOOK/$pipe" ]; then
+            rm -f "$BOOK/$pipe"
+            mkfifo "$BOOK/$pipe"
+        fi
+    done
 
-# 2) 固定 FIFO：fills order diffs
-for pipe in fills order diffs; do
-  if [ ! -p "$book/$pipe" ]; then
-    rm -f "$book/$pipe"
-    mkfifo "$book/$pipe"
-  fi
+    # 3. Top-level symlinks (TEMP -> BOOK)
+    ln -sf "$BOOK/node_fills$SUFFIX" "$TEMP/node_fills$SUFFIX"
+    ln -sf "$BOOK/node_order_statuses$SUFFIX" "$TEMP/node_order_statuses$SUFFIX"
+    ln -sf "$BOOK/node_raw_book_diffs$SUFFIX" "$TEMP/node_raw_book_diffs$SUFFIX"
+    ln -sf "$ROOT/hl/periodic_abci_states" "$TEMP/periodic_abci_states"
+
+    # Target: Current UTC time
+    TARGET_DATE_CMD=(date -u)
+    
+else
+    # === Rotation Mode (Cron) ===
+    # Target: Next hour UTC
+    TARGET_DATE_CMD=(date -u -d '+1 hour')
+    
+    # Log execution
+    echo "[$(date)] Preparing for next hour..." >> /home/aimee/hl_runtime/hl_book/cron_link.log
+fi
+
+# === Common Logic: Generate hourly structure ===
+
+# Get target Date/Hour (strip leading zeros, e.g. 05 -> 5)
+D=$("${TARGET_DATE_CMD[@]}" +%Y%m%d)
+H=$("${TARGET_DATE_CMD[@]}" +%-H)
+
+# Create dirs and link hourly files to root FIFOs
+for type in "node_fills${SUFFIX}:fills" "node_order_statuses${SUFFIX}:order" "node_raw_book_diffs${SUFFIX}:diffs"; do 
+    dir=${type%%:*}   # col 1: dir name
+    pipe=${type##*:}  # col 2: pipe name
+    
+    # 1. Create hourly dir
+    mkdir -p "$BOOK/$dir/hourly/$D"
+    
+    # 2. Link hourly file -> root pipe
+    # e.g.: hl_book/node_fills_by_block/hourly/YYYYMMDD/H -> hl_book/fills
+    ln -sf "$BOOK/$pipe" "$BOOK/$dir/hourly/$D/$H"
 done
 
-#ln -sf "$book/node_fills${t}" "$B/node_fills${t}"
-#ln -sf "$book/node_order_statuses${t}" "$B/node_order_statuses${t}"
-#ln -sf "$book/node_raw_book_diffs${t}" "$B/node_raw_book_diffs${t}"
-
-# 3) 目录结构（UTC）
-mkdir -p "$book/node_fills${t}/hourly/$D"
-mkdir -p "$book/node_order_statuses${t}/hourly/$D"
-mkdir -p "$book/node_raw_book_diffs${t}/hourly/$D"
-mkdir -p "/home/aimee/hl_runtime/hl/periodic_abci_states"
-
-# 4) 当前小时软链接（Bootstrap）
-ln -sf "$book/node_fills${t}" "$B/node_fills${t}"
-ln -sf "$book/node_order_statuses${t}" "$B/node_order_statuses${t}"
-ln -sf "$book/node_raw_book_diffs${t}" "$B/node_raw_book_diffs${t}"
-
-ln -sf "$book/fills" "$book/node_fills${t}/hourly/$D/$H"
-ln -sf "$book/order" "$book/node_order_statuses${t}/hourly/$D/$H"
-ln -sf "$book/diffs" "$book/node_raw_book_diffs${t}/hourly/$D/$H"
-ln -sf "/home/aimee/hl_runtime/hl/periodic_abci_states" "$B/periodic_abci_states"
-echo "✅ [book_tmpfs_init] Infrastructure initialized for UTC $D/$H"
+echo "✅ [book_tmpfs_init] Mode: $MODE | Target: UTC $D Hour $H"
 

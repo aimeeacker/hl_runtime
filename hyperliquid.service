@@ -22,23 +22,24 @@ Environment=RUST_LOG=info
 
 ExecStartPre=/home/aimee/hl_runtime/book_tmpfs_init.sh
 ExecStart=/home/aimee/hl_runtime/hl-visor run-non-validator --serve-info --write-fills --write-order-statuses --write-raw-book-diffs --disable-output-file-buffering --batch-by-block --replica-cmds-style recent-actions
-ExecStartPost=/bin/bash -c '/home/aimee/hl_runtime/fifo_listener >> /home/aimee/hl_runtime/hl_book/fifo.log 2>&1 &'
+# Use a subshell with SIGINT trap reset to ensure the listener receives the kill signal
+ExecStartPost=/bin/bash -c '(trap - SIGINT; exec /home/aimee/hl_runtime/fifo_listener >> /home/aimee/hl_runtime/hl_book/fifo.log 2>&1) &'
 
-# 优雅退出，避免checkpoint反复重做
+# Graceful shutdown to prevent checkpoint corruption
 KillSignal=SIGINT
 TimeoutStopSec=120
 Restart=always
 RestartSec=5
 
-# 资源与稳定性
+# Resource limits
 LimitNOFILE=1048576
 LimitNPROC=1048576
 Nice=-5
 
-# systemd 日志标识
+# Syslog identifier
 SyslogIdentifier=hyex
 
-# 安全硬化（不影响写数据盘）
+# Security hardening
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=false
