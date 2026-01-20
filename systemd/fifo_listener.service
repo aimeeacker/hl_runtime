@@ -9,7 +9,8 @@ Type=simple
 User=@RUN_USER@
 UMask=0022
 WorkingDirectory=@ROOT@
-ExecStart=/bin/bash -c 'exec @ROOT@/fifo_listener >> @ROOT@/hl_book/fifo.log 2>&1'
+Environment=RUST_LOG=info
+ExecStart=@ROOT@/fifo_listener
 KillSignal=SIGINT
 Restart=always
 
