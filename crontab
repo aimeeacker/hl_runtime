@@ -1,0 +1,5 @@
+0 */4 * * * /usr/bin/find /home/aimee/hl_runtime/hl_book \( -type f -o -type l \) -mmin +2 -delete
+59 * * * * /home/aimee/hl_runtime/book_tmpfs_init.sh next
+#*/5 * * * * /usr/bin/find /home/aimee/hl_runtime/hl_tmp/replica_cmds -type f -mmin +3 -delete
+*/5 * * * * /usr/bin/find /home/aimee/hl_runtime/hl/periodic_abci_states -type f -mmin +3 -delete
+*/5 * * * * cd /home/aimee/hl_runtime/hl/hyperliquid_data/evm_db_hub_slow/checkpoint && ls -d */ | sed 's:/$::' | sort -nr | tail -n +3 | xargs -r rm -rf
