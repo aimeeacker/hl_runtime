@@ -66,7 +66,7 @@ if [ "$MODE" = "init" ]; then
 else
     # === Rotation Mode (Cron) ===
     # Target: Next hour UTC
-    # Log execution
-    echo "[$(date)] Preparing for next hour..." >> /home/aimee/hl_runtime/hl_book/cron_link.log
+    # Log execution (disabled)
+    # echo "[$(date)] Preparing for next hour..." >> /home/aimee/hl_runtime/hl_book/cron_link.log
     link_hour "next" date -u -d '+1 hour'
 fi
