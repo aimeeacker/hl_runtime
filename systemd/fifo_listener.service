@@ -1,16 +1,14 @@
 [Unit]
-Description=Hyperliquid FIFO listener
+Description=FIFO listener
 After=network-online.target
 Wants=network-online.target
-PartOf=hyperliquid.service
+#PartOf=hyperliquid.service
 
 [Service]
 Type=simple
-User=@RUN_USER@
 UMask=0022
 WorkingDirectory=@ROOT@
-Environment=RUST_LOG=info
-ExecStart=@ROOT@/fifo_listener
+ExecStart=@ROOT@/bin/python @ROOT@/python_example.py
 KillSignal=SIGINT
 Restart=always
 
@@ -19,5 +17,8 @@ PrivateTmp=true
 ProtectHome=false
 ProtectSystem=full
 ReadWritePaths=@ROOT@
-SyslogIdentifier=fifo
+SyslogIdentifier=hl-listener
 Slice=hl_runtime.slice
+
+[Install]
+WantedBy=default.target

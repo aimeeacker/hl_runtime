@@ -2,7 +2,6 @@
 Description=Hyperliquid Non-Validator Node (hl-visor)
 After=network-online.target
 Wants=network-online.target
-Wants=hl_runtime_maintenance.timer
 Wants=fifo_listener.service
 After=fifo_listener.service
 #StartLimitIntervalSec=300
@@ -10,10 +9,9 @@ StartLimitBurst=10
 
 [Service]
 Type=simple
-User=@RUN_USER@
 UMask=0022
-MemoryHigh=49G
-MemoryMax=50G
+MemoryHigh=29G
+MemoryMax=30G
 MemorySwapMax=0
 #PermissionsStartOnly=true
 
@@ -23,8 +21,8 @@ WorkingDirectory=@ROOT@
 Environment=RUST_LOG=info
 
 
-ExecStartPre=@ROOT@/book_tmpfs_init.sh
-ExecStartPre=/bin/systemctl is-active --quiet fifo_listener.service
+#ExecStartPre=@ROOT@/book_tmpfs_init.sh
+#ExecStartPre=/usr/bin/systemctl --user is-active --quiet fifo_listener.service
 ExecStart=@ROOT@/hl-visor run-non-validator --serve-info --write-fills --write-order-statuses --write-raw-book-diffs --disable-output-file-buffering --batch-by-block --replica-cmds-style recent-actions
 
 # Graceful shutdown to prevent checkpoint corruption
@@ -38,9 +36,7 @@ LimitNPROC=1048576
 Nice=-5
 
 # Syslog identifier
-SyslogIdentifier=hyex
-
-Slice=hl_runtime.slice
+SyslogIdentifier=hl-node
 
 # Security hardening
 NoNewPrivileges=true
@@ -48,6 +44,7 @@ PrivateTmp=true
 ProtectHome=false
 ProtectSystem=full
 ReadWritePaths=@ROOT@
+Slice=hl_runtime.slice
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

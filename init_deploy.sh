@@ -124,8 +124,7 @@ write_crontab() {
 
     block=$(cat <<EOF
 $BEGIN_MARKER
-0 */4 * * * /usr/bin/find $ROOT/hl_book \\( -type f -o -type l \\) -mmin +2 -delete
-59 * * * * $ROOT/book_tmpfs_init.sh next
+# scheduled tasks are handled by python_example.py
 $END_MARKER
 EOF
 )
@@ -145,7 +144,6 @@ main() {
     require_root
     require_cmd curl
     require_cmd gpg
-    require_cmd systemctl
     require_cmd crontab
     require_cmd awk
     require_cmd sed
@@ -157,16 +155,15 @@ main() {
     mkdir -p "$ROOT/hl_book" "$ROOT/hl_tmp" "$ROOT/hl"
 
     update_hl_visor
-    RUN_USER="$RUN_USER" ENABLE_TIMER=1 "$UNIT_INSTALL_SCRIPT"
     write_fstab
     write_sysctl
     write_crontab
 
     echo "Done."
-    echo "Service installed at /etc/systemd/system/$SERVICE_NAME (not enabled or started)."
-    echo "Timer installed and enabled: hl_runtime_maintenance.timer"
-    echo "To start: systemctl start $SERVICE_NAME"
-    echo "To enable at boot: systemctl enable $SERVICE_NAME"
+    echo "Systemd user units are not installed by this script."
+    echo "Run as your user: $UNIT_INSTALL_SCRIPT"
+    echo "Then start: systemctl --user start $SERVICE_NAME"
+    echo "Enable on login: systemctl --user enable $SERVICE_NAME"
 }
 
 main "$@"

@@ -5,9 +5,10 @@ set -eu
 ROOT="/home/aimee/hl_runtime"
 BOOK="$ROOT/hl_book"
 TEMP="$ROOT/hl_tmp"
+PIPE="$BOOK/node_fifo"
 SUFFIX="_by_block"
 
-# Mode: "init" (default, for service startup) or "next" (cron job for next hour)
+# Mode: "init" (default, for service startup only)
 MODE="${1:-init}"
 
 link_hour() {
@@ -31,7 +32,7 @@ link_hour() {
 
         # 2. Link hourly file -> root pipe
         # e.g.: hl_book/node_fills_by_block/hourly/YYYYMMDD/H -> hl_book/fills
-        ln -sf "$BOOK/$pipe" "$BOOK/$dir/hourly/$d/$h"
+        ln -sf "$PIPE/$pipe" "$BOOK/$dir/hourly/$d/$h"
     done
 
     echo "✅ [book_tmpfs_init] Mode: $mode_label | Target: UTC $d Hour $h"
@@ -42,13 +43,14 @@ if [ "$MODE" = "init" ]; then
 
     # 1. Base directories
     mkdir -p "$TEMP"
+    mkdir -p "$PIPE"
     mkdir -p "$ROOT/hl/periodic_abci_states"
 
     # 2. FIFO pipes
     for pipe in fills order diffs; do
-        if [ ! -p "$BOOK/$pipe" ]; then
-            rm -f "$BOOK/$pipe"
-            mkfifo "$BOOK/$pipe"
+        if [ ! -p "$PIPE/$pipe" ]; then
+            rm -f "$PIPE/$pipe"
+            mkfifo "$PIPE/$pipe"
         fi
     done
 
@@ -65,11 +67,8 @@ if [ "$MODE" = "init" ]; then
     link_hour "init" date -u
 
     # Also prepare next hour to match cron behavior
-    link_hour "init" date -u -d '+1 hour'
+    #link_hour "init" date -u -d '+1 hour'
 else
-    # === Rotation Mode (Cron) ===
-    # Target: Next hour UTC
-    # Log execution (disabled)
-    # echo "[$(date)] Preparing for next hour..." >> /home/aimee/hl_runtime/hl_book/cron_link.log
     link_hour "next" date -u -d '+1 hour'
+    #echo "[book_tmpfs_init] Only init mode is supported now; use python_example.py for scheduling."
 fi
