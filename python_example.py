@@ -11,6 +11,7 @@
 
 
 import asyncio
+import shutil
 import logging
 import os
 from pathlib import Path
@@ -101,17 +102,41 @@ async def get_hyperliquid_memory():
             return memory_used
     return None
 
+
+async def is_service_running(service_name: str = "hyperliquid.service") -> bool:
+    proc = await asyncio.create_subprocess_exec(
+        "systemctl", "--user", "is-active", service_name,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=os.environ.copy(),
+    )
+    stdout, _ = await proc.communicate()
+    return True if stdout.decode().strip() == "active" else False
+
+
 async def monitor_service_health() -> None:
+    global local_height
+    async def clear_cache() -> None:
+        await asyncio.sleep(1)
+        shutil.rmtree(ROOT / "hl/tmp", ignore_errors=True)
+        TMP = Path("/home/aimee/hl_runtime/hl_tmp")
+        for p in TMP.iterdir():
+            if p.is_dir():
+                shutil.rmtree(p, ignore_errors=True)
+
     # 1. Memory Check (Priority: Critical)
     mem = await get_hyperliquid_memory()
-    if mem and mem > 28000:  # ~27.3 GiB
+    if mem and mem > 25600:  # ~27.3 GiB
+        await asyncio.sleep(20)
         logger.warning(f"🔄 OOM Risk: {mem:.2f} MiB. Restarting...")
+        await run_command("oom_restart", "systemctl --user stop hyperliquid.service")
+        await clear_cache()
         await run_command("oom_restart", "systemctl --user restart hyperliquid.service")
         return
 
     # 2. Synchronization Check
-    if local_height is None:
+    is_running = await is_service_running()
+    if not is_running:
         logger.info("ℹ️ Init start hyperliquid.service")
+        local_height = -1
         await run_command("init_start", "systemctl --user start hyperliquid.service")
         return
 
@@ -120,11 +145,15 @@ async def monitor_service_health() -> None:
     lh = local_height if local_height is not None else 0
     diff = block_height - lh
 
-    if diff > 1500:
+    if diff > 4000:
         logger.warning(f"🔄 Sync Lag: {diff} blocks (H:{block_height} L:{lh}). Restarting...")
+        await run_command("lag_restart", "systemctl --user stop hyperliquid.service")
         p = ROOT / "hl/hyperliquid_data/abci_state.rmp"
         p.unlink(missing_ok=True)
-        await run_command("lag_restart", "systemctl --user restart hyperliquid.service")
+        await clear_cache()
+        await run_command("lag_restart", "systemctl --user start hyperliquid.service")
+
+        
 
 
 def init_environment() -> None:
@@ -153,7 +182,9 @@ def init_environment() -> None:
         link.symlink_to(target)
 
     force_symlink(hl_dir, "/home/aimee/hl")
-    force_symlink(temp, hl_dir / "data")
+    force_symlink(temp, hl_dir / "data")    
+    force_symlink(hl_dir / "periodic_abci_states", hl_dir / "data/periodic_abci_states")
+
 
     for name in ["node_fills", "node_order_statuses", "node_raw_book_diffs"]:
         base = f"{name}{suffix}"
@@ -176,6 +207,9 @@ def init_environment() -> None:
 def on_height(height: int) -> None:
     global local_height
     local_height = height
+    lag = block_height - local_height
+    if lag > 127:
+        logger.warning("⚠️ Local lagging: Hyperliquid Height: %d, lag: %d", block_height, lag)
     #logger.info("Local Height: %d, Hyperliquid Height: %d", local_height, block_height)
 
 async def on_hyex_message(message: dict) -> None:
@@ -197,10 +231,18 @@ async def main():
         scheduler.add_job(timer_maintenance_5min, CronTrigger(minute="*/5", second="15"))
         #scheduler.add_job(monitor_service_health, CronTrigger(minute="*/1", second="10"))#
         scheduler.start()
+        await asyncio.sleep(3) # wait for hyex_ws to fetch initial data
 
+        is_running = await is_service_running()
+        if is_running:
+            local_height = -1
+        else:
+            init_environment()
+            if block_height % 10000 < 1500:
+                await monitor_service_health()
 
-        init_environment()
         listener.start(on_height)
+
         await asyncio.Event().wait()
     except KeyboardInterrupt:
         logger.info("❌ 收到 Ctrl+C, 程序退出")
