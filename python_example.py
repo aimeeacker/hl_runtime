@@ -233,13 +233,13 @@ def init_environment() -> None:
     logger.info(f"✅ init_environment done: {d} hour {h}")
 
 
-def on_height(height: int) -> None:
+async def on_height(height: int) -> None:
     global local_height, last_alert_time
     local_height = height
     lag = block_height - local_height
     if lag > 127:
         logger.warning("⚠️ Local lagging: Hyperliquid Height: %d, lag: %d", block_height, lag)
-        if last_alert_time is None or (time.monotonic() - last_alert_time) > 59:
+        if time.monotonic() - last_alert_time > 59:
             message = f"⚠️ Local Hyperliquid Node Lagging!\nHyperliquid Height: {block_height}\nLocal Height: {local_height}\nLag: {lag} blocks"
             asyncio.create_task(node_alert_bot.send_message(chat_id=7989368691, text=message))  # main
             last_alert_time = time.monotonic()
@@ -254,7 +254,8 @@ async def on_hyex_message(message: dict) -> None:
     #block_time = message[0]["blockTime"]
 
 async def main():
-    global node_alert_bot
+    global node_alert_bot, last_alert_time
+    last_alert_time = time.monotonic() - 60 # allow immediate alert on startup
     node_alert_bot = Bot(base_url=BOT_API_BASE, token='8305356866:AAHzFldpTRa49AeeTO8F4ai1rJicLAM3XZI',
                 request=HTTPXRequest(connection_pool_size=7))  # main
     #node_alert_bot_webhook = TelegramWebhookBot(token="8305356866:AAHzFldpTRa49AeeTO8F4ai1rJicLAM3XZI", public_base=PUBLIC_BASE, port = 8006, 
@@ -280,8 +281,8 @@ async def main():
             init_environment()
             if block_height % 10000 < 1500:
                 await monitor_service_health()
-
-        listener.start(on_height)
+        loop = asyncio.get_running_loop()
+        listener.start(on_height, event_loop=loop)
 
         await asyncio.Event().wait()
     except KeyboardInterrupt:
