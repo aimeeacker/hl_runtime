@@ -16,14 +16,20 @@ import logging
 import os
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+import time
 
 import fifo_listener
 from binance.ws.reconnecting_websocket import Hyperliqueid_Websocket
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from telegram import Bot
+from telegram.request import HTTPXRequest
+from tg_webhook_bot import TelegramWebhookBot
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
+
 from mylogger import setup_logger
-setup_logger(level=logging.INFO, muted_patterns=["apscheduler.*"])
+setup_logger(level=logging.INFO, muted_patterns=["apscheduler.*", "httpx"])
 
 
 logger = logging.getLogger("RUNTIME")
@@ -32,6 +38,8 @@ ROOT = Path(__file__).resolve().parent
 scheduler = AsyncIOScheduler(job_defaults={"coalesce": True, "max_instances": 1})
 local_height = None
 block_height = None
+BOT_API_BASE = "http://172.22.0.198:8081/bot"
+PUBLIC_BASE = "http://172.22.2.10"
 
 
 async def run_command(name: str, command: str) -> None:
@@ -58,19 +66,25 @@ async def rotate_to_next_hour() -> None:
     for name in ["node_fills", "node_order_statuses", "node_raw_book_diffs"]:
         base = ROOT / "hl_book" / f"{name}_by_block" / "hourly"
         src = base / now.strftime("%Y%m%d")
+        prev = src / str((now - delta).hour)
         cur = src / str(now.hour)
         nxt = src / str((now + delta).hour)
         if nxt.exists():
             continue  # already rotated
-        if cur.exists():
-            os.rename(cur, nxt)
+        if prev.exists():
+            os.rename(prev, nxt)
         else:
             target = ROOT / "hl_book" / "node_fifo" / FIFO_MAP[name]
             os.symlink(target, nxt)
 
         if now.hour == 23:
             dst_dir = base / (now + delta).strftime("%Y%m%d")
-            os.rename(src, dst_dir)
+            os.makedirs(dst_dir, exist_ok=True)
+            shutil.move(nxt, dst_dir)
+            #os.rename(src, dst_dir)
+        elif now.hour == 0:
+            tmp = base / (now - delta).strftime("%Y%m%d")
+            shutil.rmtree(tmp, ignore_errors=True)
 
     logger.info(f"rotate_to {(now + delta).strftime('%Y%m%d')}/{str((now + delta).hour)}")
 
@@ -112,6 +126,18 @@ async def is_service_running(service_name: str = "hyperliquid.service") -> bool:
     return True if stdout.decode().strip() == "active" else False
 
 
+async def wait_for_file_update(bh: int) -> None:
+    target = ROOT / "hl/hyperliquid_data/abci_state.rmp"
+    f = str(bh) + ".rmp"
+    root = ROOT / "hl/periodic_abci_states"
+    while True:
+        for r, _, fs in os.walk(root):
+            if f in fs and os.stat(os.path.join(r, f)).st_ino == os.stat(target).st_ino:
+                await asyncio.sleep(1)
+                return
+        await asyncio.sleep(1)
+
+
 async def monitor_service_health() -> None:
     global local_height
     async def clear_cache() -> None:
@@ -125,11 +151,13 @@ async def monitor_service_health() -> None:
     # 1. Memory Check (Priority: Critical)
     mem = await get_hyperliquid_memory()
     if mem and mem > 25600:  # ~27.3 GiB
-        await asyncio.sleep(20)
+        await wait_for_file_update(block_height - block_height % 10000)
         logger.warning(f"🔄 OOM Risk: {mem:.2f} MiB. Restarting...")
         await run_command("oom_restart", "systemctl --user stop hyperliquid.service")
         await clear_cache()
         await run_command("oom_restart", "systemctl --user restart hyperliquid.service")
+        message = f"⚠️ Hyperliquid OOM Risk detected!\nMemory Usage: {mem / 1024:.2f} GiB\nService restarted."
+        asyncio.create_task(node_alert_bot.send_message(chat_id=7989368691, text=message))  # main
         return
 
     # 2. Synchronization Check
@@ -153,7 +181,8 @@ async def monitor_service_health() -> None:
         await clear_cache()
         await run_command("lag_restart", "systemctl --user start hyperliquid.service")
 
-        
+        message = f"⚠️ Hyperliquid Sync Lag detected!\nLag: {diff} blocks\nService restarted."
+        asyncio.create_task(node_alert_bot.send_message(chat_id=7989368691, text=message))  # main
 
 
 def init_environment() -> None:
@@ -205,11 +234,15 @@ def init_environment() -> None:
 
 
 def on_height(height: int) -> None:
-    global local_height
+    global local_height, last_alert_time
     local_height = height
     lag = block_height - local_height
     if lag > 127:
         logger.warning("⚠️ Local lagging: Hyperliquid Height: %d, lag: %d", block_height, lag)
+        if last_alert_time is None or (time.monotonic() - last_alert_time) > 59:
+            message = f"⚠️ Local Hyperliquid Node Lagging!\nHyperliquid Height: {block_height}\nLocal Height: {local_height}\nLag: {lag} blocks"
+            asyncio.create_task(node_alert_bot.send_message(chat_id=7989368691, text=message))  # main
+            last_alert_time = time.monotonic()
     #logger.info("Local Height: %d, Hyperliquid Height: %d", local_height, block_height)
 
 async def on_hyex_message(message: dict) -> None:
@@ -221,6 +254,13 @@ async def on_hyex_message(message: dict) -> None:
     #block_time = message[0]["blockTime"]
 
 async def main():
+    global node_alert_bot
+    node_alert_bot = Bot(base_url=BOT_API_BASE, token='8305356866:AAHzFldpTRa49AeeTO8F4ai1rJicLAM3XZI',
+                request=HTTPXRequest(connection_pool_size=7))  # main
+    #node_alert_bot_webhook = TelegramWebhookBot(token="8305356866:AAHzFldpTRa49AeeTO8F4ai1rJicLAM3XZI", public_base=PUBLIC_BASE, port = 8006, 
+    #                                            allowed_updates=["message"], #on_text=on_symbol_message, 
+    #                                            bot_api_base=BOT_API_BASE, require_https_public= False)
+    #await node_alert_bot.send_message(chat_id=7989368691, text="✅ Hyperliquid Node Runtime Started")  # main
     try:
         listener = fifo_listener.FifoListener()        
         global local_height, block_height
