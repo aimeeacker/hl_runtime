@@ -1,0 +1,24 @@
+[Unit]
+Description=Order book WebSocket server
+After=network-online.target fifo_listener.service
+Wants=network-online.target fifo_listener.service
+
+[Service]
+Type=simple
+UMask=0022
+WorkingDirectory=@ROOT@
+Environment=RUST_LOG=info
+ExecStart=@ROOT@/book_server
+KillSignal=SIGINT
+Restart=always
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=false
+ProtectSystem=full
+ReadWritePaths=@ROOT@
+SyslogIdentifier=book-server
+Slice=hl_runtime.slice
+
+[Install]
+WantedBy=default.target
