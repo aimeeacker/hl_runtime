@@ -18,7 +18,7 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone
 import time
 
-import fifo_listener
+import fifo_listener #type: ignore
 from binance.ws.reconnecting_websocket import Hyperliqueid_Websocket
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -39,7 +39,7 @@ scheduler = AsyncIOScheduler(job_defaults={"coalesce": True, "max_instances": 1}
 local_height = None
 block_height = None
 BOT_API_BASE = "http://172.22.0.198:8081/bot"
-PUBLIC_BASE = "http://172.22.2.10"
+PUBLIC_BASE = "http://172.22.2.9"
 
 
 async def run_command(name: str, command: str) -> None:
@@ -150,7 +150,7 @@ async def monitor_service_health() -> None:
 
     # 1. Memory Check (Priority: Critical)
     mem = await get_hyperliquid_memory()
-    if mem and mem > 25600:  # ~27.3 GiB
+    if mem and mem > 49152:  # ~48 GiB
         await wait_for_file_update(block_height - block_height % 10000)
         logger.warning(f"🔄 OOM Risk: {mem:.2f} MiB. Restarting...")
         await run_command("oom_restart", "systemctl --user stop hyperliquid.service")
