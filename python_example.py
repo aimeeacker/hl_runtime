@@ -38,8 +38,13 @@ ROOT = Path(__file__).resolve().parent
 scheduler = AsyncIOScheduler(job_defaults={"coalesce": True, "max_instances": 1})
 local_height = None
 block_height = None
+scheduled_restart = False
 BOT_API_BASE = "http://172.22.0.198:8081/bot"
 PUBLIC_BASE = "http://172.22.2.9"
+
+async def setup_scheduled_restart():
+    global scheduled_restart
+    scheduled_restart = True
 
 
 async def run_command(name: str, command: str) -> None:
@@ -139,7 +144,7 @@ async def wait_for_file_update(bh: int) -> None:
 
 
 async def monitor_service_health() -> None:
-    global local_height
+    global local_height, scheduled_restart
     async def clear_cache() -> None:
         await asyncio.sleep(1)
         shutil.rmtree(ROOT / "hl/tmp", ignore_errors=True)
@@ -147,6 +152,17 @@ async def monitor_service_health() -> None:
         for p in TMP.iterdir():
             if p.is_dir():
                 shutil.rmtree(p, ignore_errors=True)
+
+    if scheduled_restart:
+        await wait_for_file_update(block_height - block_height % 10000)
+        logger.info("🔄 Scheduled Restart Executing...")
+        await run_command("oom_restart", "systemctl --user stop hyperliquid.service")
+        await clear_cache()
+        await run_command("oom_restart", "systemctl --user restart hyperliquid.service")
+        scheduled_restart = False
+        message = f"🔄 Hyperliquid Scheduled Restart executed!\nService restarted."
+        asyncio.create_task(node_alert_bot.send_message(chat_id=7989368691, text=message))  # main
+        return
 
     # 1. Memory Check (Priority: Critical)
     mem = await get_hyperliquid_memory()
@@ -165,6 +181,7 @@ async def monitor_service_health() -> None:
     if not is_running:
         logger.info("ℹ️ Init start hyperliquid.service")
         local_height = -1
+        await clear_cache()
         await run_command("init_start", "systemctl --user start hyperliquid.service")
         return
 
@@ -270,6 +287,7 @@ async def main():
         await hyex_ws._start()
         scheduler.add_job(rotate_to_next_hour, CronTrigger(minute="59", second="55"))
         scheduler.add_job(timer_maintenance_5min, CronTrigger(minute="*/5", second="15"))
+        scheduler.add_job(setup_scheduled_restart, CronTrigger(minute="0", hour="21", day_of_week="0-4"))
         #scheduler.add_job(monitor_service_health, CronTrigger(minute="*/1", second="10"))#
         scheduler.start()
         await asyncio.sleep(3) # wait for hyex_ws to fetch initial data

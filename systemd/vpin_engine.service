@@ -1,0 +1,24 @@
+[Unit]
+Description=VPIN Engine Service
+After=network-online.target
+Wants=network-online.target
+
+
+[Service]
+Type=simple
+UMask=0022
+WorkingDirectory=/home/aimee/binance_depth/build
+ExecStart=/home/aimee/binance_depth/.venv/bin/python /home/aimee/binance_depth/build/test.py
+KillSignal=SIGINT
+Restart=always
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=false
+ProtectSystem=full
+ReadWritePaths=/home/aimee/binance_depth/build
+SyslogIdentifier=vpin-engine
+Slice=hl_runtime.slice
+
+[Install]
+WantedBy=default.target
