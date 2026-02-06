@@ -4,5 +4,6 @@ hl_book/
 .venv/
 .vscode/
 hl-visor
+hl-visor.asc
 hl-node
 hl-node.asc

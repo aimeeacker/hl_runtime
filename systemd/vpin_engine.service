@@ -7,8 +7,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 UMask=0022
-WorkingDirectory=/home/aimee/binance_depth/build
-ExecStart=/home/aimee/binance_depth/.venv/bin/python /home/aimee/binance_depth/build/test.py
+WorkingDirectory=/home/aimee/hl_runtime
+ExecStart=/home/aimee/hl_runtime/.venv/bin/python /home/aimee/hl_runtime/vpin_engine.py
 KillSignal=SIGINT
 Restart=always
 
@@ -16,7 +16,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=false
 ProtectSystem=full
-ReadWritePaths=/home/aimee/binance_depth/build
+ReadWritePaths=/home/aimee/hl_runtime
 SyslogIdentifier=vpin-engine
 Slice=hl_runtime.slice
 
