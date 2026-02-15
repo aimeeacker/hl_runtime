@@ -8,7 +8,7 @@ Wants=network-online.target
 Type=simple
 UMask=0022
 WorkingDirectory=@ROOT@
-ExecStart=@ROOT@/.venv/bin/python @ROOT@/python_example.py
+ExecStart=@ROOT@/.venv/bin/python @ROOT@/runtime_watchdog.py
 KillSignal=SIGINT
 Restart=always
 

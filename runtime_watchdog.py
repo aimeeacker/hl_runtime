@@ -153,6 +153,30 @@ async def monitor_service_health() -> None:
             if p.is_dir():
                 shutil.rmtree(p, ignore_errors=True)
 
+    # If local_height is missing (script startup), treat as 0 (huge lag)
+    # The cron job runs every 1 min, giving enough warm-up time for FIFO.
+    lh = local_height if local_height is not None else 0
+    diff = block_height - lh
+    is_running = await is_service_running()
+
+    if diff > 4000 and is_running:
+        logger.warning(f"🔄 Sync Lag: {diff} blocks (H:{block_height} L:{lh}). Restarting...")
+        await run_command("lag_restart", "systemctl --user stop hyperliquid.service")
+        p = ROOT / "hl/hyperliquid_data/abci_state.rmp"
+        p.unlink(missing_ok=True)
+        await clear_cache()
+        await run_command("lag_restart", "systemctl --user start hyperliquid.service")
+
+        message = f"⚠️ Hyperliquid Sync Lag detected!\nLag: {diff} blocks\nService restarted."
+        asyncio.create_task(node_alert_bot.send_message(chat_id=7989368691, text=message))  # main
+        return
+    elif not is_running:
+        logger.info("ℹ️ Init start hyperliquid.service")
+        local_height = -1
+        await clear_cache()
+        await run_command("init_start", "systemctl --user start hyperliquid.service")
+        return
+    
     if scheduled_restart:
         await wait_for_file_update(block_height - block_height % 10000)
         logger.info("🔄 Scheduled Restart Executing...")
@@ -175,31 +199,6 @@ async def monitor_service_health() -> None:
         message = f"⚠️ Hyperliquid OOM Risk detected!\nMemory Usage: {mem / 1024:.2f} GiB\nService restarted."
         asyncio.create_task(node_alert_bot.send_message(chat_id=7989368691, text=message))  # main
         return
-
-    # 2. Synchronization Check
-    is_running = await is_service_running()
-    if not is_running:
-        logger.info("ℹ️ Init start hyperliquid.service")
-        local_height = -1
-        await clear_cache()
-        await run_command("init_start", "systemctl --user start hyperliquid.service")
-        return
-
-    # If local_height is missing (script startup), treat as 0 (huge lag)
-    # The cron job runs every 1 min, giving enough warm-up time for FIFO.
-    lh = local_height if local_height is not None else 0
-    diff = block_height - lh
-
-    if diff > 4000:
-        logger.warning(f"🔄 Sync Lag: {diff} blocks (H:{block_height} L:{lh}). Restarting...")
-        await run_command("lag_restart", "systemctl --user stop hyperliquid.service")
-        p = ROOT / "hl/hyperliquid_data/abci_state.rmp"
-        p.unlink(missing_ok=True)
-        await clear_cache()
-        await run_command("lag_restart", "systemctl --user start hyperliquid.service")
-
-        message = f"⚠️ Hyperliquid Sync Lag detected!\nLag: {diff} blocks\nService restarted."
-        asyncio.create_task(node_alert_bot.send_message(chat_id=7989368691, text=message))  # main
 
 
 def init_environment() -> None:
@@ -299,6 +298,8 @@ async def main():
             init_environment()
             if block_height % 10000 < 1500:
                 await monitor_service_health()
+            else:
+                logger.info(f"⚠️ blockHeight={block_height}; Delaying hyperliquid.service start to reduce sync load")
         loop = asyncio.get_running_loop()
         listener.start(on_height, event_loop=loop)
 
