@@ -143,15 +143,17 @@ async def wait_for_file_update(bh: int) -> None:
         await asyncio.sleep(1)
 
 
+async def clear_cache() -> None:
+    await asyncio.sleep(1)
+    shutil.rmtree(ROOT / "hl/tmp", ignore_errors=True)
+    TMP = Path("/home/aimee/hl_runtime/hl_tmp")
+    for p in TMP.iterdir():
+        if p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+
 async def monitor_service_health() -> None:
     global local_height, scheduled_restart
-    async def clear_cache() -> None:
-        await asyncio.sleep(1)
-        shutil.rmtree(ROOT / "hl/tmp", ignore_errors=True)
-        TMP = Path("/home/aimee/hl_runtime/hl_tmp")
-        for p in TMP.iterdir():
-            if p.is_dir():
-                shutil.rmtree(p, ignore_errors=True)
+
 
     # If local_height is missing (script startup), treat as 0 (huge lag)
     # The cron job runs every 1 min, giving enough warm-up time for FIFO.
@@ -290,7 +292,7 @@ async def main():
         #scheduler.add_job(monitor_service_health, CronTrigger(minute="*/1", second="10"))#
         scheduler.start()
         await asyncio.sleep(3) # wait for hyex_ws to fetch initial data
-
+        #await clear_cache()
         is_running = await is_service_running()
         if is_running:
             local_height = -1

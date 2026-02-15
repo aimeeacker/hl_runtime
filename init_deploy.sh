@@ -75,6 +75,7 @@ write_sysctl() {
 fs.pipe-max-size = 16777216
 net.core.wmem_max = 16777216
 net.core.rmem_max = 16777216
+kernel.pid_max = 65535
 EOF
     chmod 0644 "$SYSCTL_PATH"
     sysctl -p "$SYSCTL_PATH"
